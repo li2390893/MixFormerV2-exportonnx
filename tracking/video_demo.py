@@ -9,16 +9,37 @@ if prj_path not in sys.path:
 from lib.test.evaluation import Tracker
 
 
-def run_video(tracker_name, tracker_param, videofile='', optional_box=None, debug=None,
-              save_results=False, tracker_params=None):
+def run_video(tracker_name, 
+              tracker_param, 
+              videofile='', 
+              optional_box=None, 
+              debug=None,
+              save_results=False, 
+              tracker_params=None, 
+              zoomin=False, 
+              expansion_ratio=1.0,
+              max_per_folder=60, 
+              save_yolo=False, 
+              save_yolo_interval=2,
+              yolo_label=0):
     """Run the tracker on your webcam.
     args:
         tracker_name: Name of tracking method.
         tracker_param: Name of parameter file.
         debug: Debug level.
     """
-    tracker = Tracker(tracker_name, tracker_param, "video", tracker_params=tracker_params)
-    tracker.run_video(videofilepath=videofile, optional_box=optional_box, debug=debug, save_results=save_results)
+    tracker = Tracker(tracker_name, tracker_param, "LASOT",
+                      tracker_params=tracker_params)
+    tracker.run_video(videofilepath=videofile,
+                      optional_box=optional_box,
+                      debug=debug,
+                      save_results=save_results,
+                      is_zoomin=zoomin,
+                      expansion_ratio=expansion_ratio,
+                      max_per_folder=max_per_folder,
+                      save_yolo=save_yolo,
+                      save_yolo_interval=save_yolo_interval,
+                      yolo_label=yolo_label)
 
 
 def main():
@@ -29,7 +50,6 @@ def main():
     parser.add_argument('--optional_box', type=float, default=None, nargs="+", help='optional_box with format x y w h.')
     parser.add_argument('--debug', type=int, default=0, help='Debug level.')
     parser.add_argument('--save_results', dest='save_results', action='store_true', help='Save bounding boxes')
-    parser.set_defaults(save_results=True)
 
     parser.add_argument('--params__model', type=str, default=None, help="Tracking model path.")
     parser.add_argument('--params__update_interval', type=int, default=None, help="Update interval of online tracking.")
@@ -37,7 +57,13 @@ def main():
     parser.add_argument('--params__search_area_scale', type=float, default=None)
     parser.add_argument('--params__max_score_decay', type=float, default=1.0)
     parser.add_argument('--params__vis_attn', type=int, choices=[0, 1], default=0, help="Whether visualize the attention maps.")
-
+    parser.add_argument('--zoomin', action='store_true', help='Whether zoom in the video.')
+    parser.add_argument('--expansion_ratio', type=float, default=1.0, help="Expansion ratio for zooming in the video.")
+    parser.add_argument('--max_per_folder', type=int, default=60, help="Maximum number of frames per folder for saving results.")
+    parser.add_argument('--save_yolo', action='store_true', help="Whether save results in YOLO format.")
+    parser.add_argument('--save_yolo_interval', type=int, default=2, help="Save results in YOLO format every N frames.")
+    parser.add_argument('--yolo_label', type=int, default=0, help="Label for YOLO format.")
+    
     args = parser.parse_args()
 
     tracker_params = {}
@@ -45,8 +71,19 @@ def main():
         tracker_params[param.split('__')[1]] = getattr(args, param)
     print(tracker_params)
 
-    run_video(args.tracker_name, args.tracker_param, args.videofile, args.optional_box, args.debug,
-              args.save_results, tracker_params=tracker_params)
+    run_video(args.tracker_name,
+              args.tracker_param,
+              args.videofile,
+              args.optional_box,
+              args.debug,
+              args.save_results,
+              tracker_params=tracker_params,
+              zoomin=args.zoomin,
+              expansion_ratio=args.expansion_ratio,
+              max_per_folder=args.max_per_folder,
+              save_yolo=args.save_yolo,
+              save_yolo_interval=args.save_yolo_interval,
+              yolo_label=args.yolo_label)
 
 
 if __name__ == '__main__':
