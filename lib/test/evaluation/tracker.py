@@ -6,9 +6,8 @@ import time
 import cv2 as cv
 
 from lib.utils.lmdb_utils import decode_img
-from lib.utils.save_utils import resize_and_save, save_yolo_annotation
+from lib.utils.save_utils import resize_and_save, save_yolo_annotation, crop_save
 from pathlib import Path
-import numpy as np
 
 
 def trackerlist(name: str, parameter_name: str, dataset_name: str, run_ids=None, display_name: str = None,
@@ -168,7 +167,8 @@ class Tracker:
                   max_per_folder=60,
                   save_yolo=False,
                   save_yolo_interval=2,
-                  yolo_label=0):
+                  yolo_label=0,
+                  save_cls=False):
         """Run the tracker with the vieofile.
         args:
             debug: Debug level.
@@ -213,7 +213,7 @@ class Tracker:
         success, frame = cap.read()
         # cv.imshow(display_name, frame)
         if is_zoomin:
-            scale_factor = 3.0  # 放大
+            scale_factor = 4.0  # 放大
             h, w = frame.shape[:2]
             frame_zoom = cv.resize(
                 frame, (int(w * scale_factor), int(h * scale_factor)))
@@ -266,7 +266,7 @@ class Tracker:
             out = tracker.track(frame)
             state = [int(s) for s in out['target_bbox']]
             print(f"frame_idx: {frame_idx}, conf_score: {out['conf_score']}")
-            if out['conf_score'] < 0.5:
+            if out['conf_score'] < 0.2:
                 break
             if expansion_ratio != 1.0:
                 x, y, w, h = state
@@ -331,8 +331,11 @@ class Tracker:
                 save_dir = os.path.join(
                     self.results_dir, f'{video_name}_{folder_idx}')
                 os.makedirs(save_dir, exist_ok=True)
-                resize_and_save(target_crop, save_dir, img_idx,
-                                target_size=(224, 224), keep_aspect_ratio=True)
+                if save_cls:
+                    crop_save(target_crop, save_dir, img_idx)
+                else:
+                    resize_and_save(target_crop, save_dir, img_idx,
+                                    target_size=(224, 224), keep_aspect_ratio=True)
                 print(f"save {save_dir}/{img_idx}.jpg target image")
                 img_idx += 1
                 if img_idx >= max_per_folder:

@@ -21,7 +21,8 @@ def run_video(tracker_name,
               max_per_folder=60, 
               save_yolo=False, 
               save_yolo_interval=2,
-              yolo_label=0):
+              yolo_label=0,
+              save_cls=False):
     """Run the tracker on your webcam.
     args:
         tracker_name: Name of tracking method.
@@ -39,7 +40,8 @@ def run_video(tracker_name,
                       max_per_folder=max_per_folder,
                       save_yolo=save_yolo,
                       save_yolo_interval=save_yolo_interval,
-                      yolo_label=yolo_label)
+                      yolo_label=yolo_label,
+                      save_cls=save_cls)
 
 
 def main():
@@ -63,6 +65,7 @@ def main():
     parser.add_argument('--save_yolo', action='store_true', help="Whether save results in YOLO format.")
     parser.add_argument('--save_yolo_interval', type=int, default=2, help="Save results in YOLO format every N frames.")
     parser.add_argument('--yolo_label', type=int, default=0, help="Label for YOLO format.")
+    parser.add_argument('--save_cls', action='store_true', help="Whether save classification results (not used in video_demo.py, set to False by default).")
     
     args = parser.parse_args()
 
@@ -83,7 +86,8 @@ def main():
               max_per_folder=args.max_per_folder,
               save_yolo=args.save_yolo,
               save_yolo_interval=args.save_yolo_interval,
-              yolo_label=args.yolo_label)
+              yolo_label=args.yolo_label,
+              save_cls=args.save_cls)  # save_cls is not used in video_demo.py, set to False by default
 
 
 if __name__ == '__main__':

@@ -1,0 +1,2 @@
+mkdir -p ./images
+find ./test/tracking_results/mixformer2_vit_online/288_depth8_score -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.webp" \) -exec mv -n "{}" ./images/ \;

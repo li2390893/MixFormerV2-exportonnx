@@ -86,3 +86,21 @@ def resize_and_save(
 
     # 保存图像
     cv2.imwrite(os.path.join(save_dir, f"{img_idx}.jpg"), canvas)
+
+
+def crop_save(
+    target_crop,
+    save_dir,
+    img_idx,
+):
+    """
+    将图像缩放至目标尺寸并保存（可选择是否保持宽高比）
+
+    参数:
+        target_crop: 输入图像 (OpenCV格式, BGR)
+        save_dir: 保存目录
+        img_idx: 图像索引/名称
+    """
+
+    # 保存图像
+    cv2.imwrite(os.path.join(save_dir, f"{img_idx}.jpg"), target_crop)
