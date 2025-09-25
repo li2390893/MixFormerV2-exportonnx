@@ -7,7 +7,6 @@ from lib.train.admin import TensorboardWriter
 import torch
 import time
 from torch.utils.data.distributed import DistributedSampler
-from torch.cuda.amp import autocast
 from torch.cuda.amp import GradScaler
 
 
@@ -81,8 +80,15 @@ class LTRTrainer(BaseTrainer):
             if not self.use_amp:
                 loss, stats = self.actor(data, remove_rate_cur_epoch)
             else:
-                with autocast():
-                    loss, stats = self.actor(data)
+                # Use torch>=2.0 API if available, else legacy cuda.amp.autocast
+                amp_mod = getattr(torch, 'amp', None)
+                if amp_mod and hasattr(amp_mod, 'autocast'):
+                    ctx = amp_mod.autocast('cuda')
+                else:
+                    from torch.cuda.amp import autocast as _legacy_autocast
+                    ctx = _legacy_autocast()
+                with ctx:
+                    loss, stats = self.actor(data, remove_rate_cur_epoch)
 
             # backward pass and update weights
             if loader.training:

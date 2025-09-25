@@ -49,6 +49,8 @@ class MixFormerDistillStage1Actor(BaseActor):
         # compute losses
         loss, status = self.compute_losses(out_dict, out_dict_teacher, gt_bboxes[0], labels=labels)
 
+        status.update({"remove_rate": remove_rate_cur_epoch})
+
         return loss, status
 
     def forward_pass(self, data):

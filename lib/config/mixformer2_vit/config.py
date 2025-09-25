@@ -51,6 +51,7 @@ cfg.TRAIN.FEAT_WEIGHT = 0.2
 cfg.TRAIN.TEACHER_MODEL = False
 cfg.TRAIN.FIND_UNUSED_PARAMETERS = False
 cfg.TRAIN.REMOVE_LAYERS = []
+cfg.TRAIN.AMP = False  # Automatic Mixed Precision
 # TRAIN.SCHEDULER
 cfg.TRAIN.SCHEDULER = edict()
 cfg.TRAIN.SCHEDULER.TYPE = "step"

@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+"""
+Train script module that can be launched as a Python module.
+This is a wrapper around run_training.py to support module-based execution.
+"""
+
 import os
 import sys
 import argparse
@@ -9,6 +15,11 @@ import torch.distributed as dist
 import random
 import numpy as np
 torch.backends.cudnn.benchmark = False
+
+# Add the project root to the Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 import _init_paths
 import lib.train.admin.settings as ws_settings
@@ -29,7 +40,7 @@ def run_training(script_name, config_name, cudnn_benchmark=True, local_rank=-1, 
                  static_model=None):
     """Run the train script.
     args:
-        script_name: Name of emperiment in the "experiments/" folder.
+        script_name: Name of experiment in the "experiments/" folder.
         config_name: Name of the yaml file in the "experiments/<script_name>".
         cudnn_benchmark: Use cudnn benchmark or not (default is True).
     """
@@ -69,17 +80,20 @@ def run_training(script_name, config_name, cudnn_benchmark=True, local_rank=-1, 
         settings.config_teacher = config_teacher
         settings.checkpoint_teacher_path = checkpoint_teacher_path
         settings.cfg_file_teacher = os.path.join(prj_dir, 'experiments/%s/%s.yaml' % (script_teacher, config_teacher))
-        # expr_module = importlib.import_module('lib.train.train_script_mixformer')
+        # Import distillation training script
         expr_module = importlib.import_module('lib.train.train_script_distill')
     else:
+        # Import regular training script
         expr_module = importlib.import_module('lib.train.train_script_mixformer')
+    
     expr_func = getattr(expr_module, 'run')
 
-    # print(settings)
+    # Run the training
     expr_func(settings)
 
 
 def main():
+    """Main function that parses arguments and starts training."""
     parser = argparse.ArgumentParser(description='Run a train scripts in train_settings.')
     parser.add_argument('--script', type=str, required=True, help='Name of the train script.')
     parser.add_argument('--config', type=str, required=True, help="Name of the config file.")
@@ -98,18 +112,27 @@ def main():
     parser.add_argument('--static_model', type=str, default=None, help='static model used to train SPM.')
 
     args = parser.parse_args()
-    local_rank = int(os.environ.get("LOCAL_RANK", -1)) 
-    if local_rank != -1:
+    
+    # Initialize distributed training if needed
+    if args.local_rank != -1:
         dist.init_process_group(backend='nccl')
-        torch.cuda.set_device(local_rank)
+        torch.cuda.set_device(args.local_rank)
     else:
         torch.cuda.set_device(0)
+    
+    # Run the training
     run_training(args.script, args.config, cudnn_benchmark=args.cudnn_benchmark,
-                 local_rank=local_rank, save_dir=args.save_dir, base_seed=args.seed,
+                 local_rank=args.local_rank, save_dir=args.save_dir, base_seed=args.seed,
                  use_lmdb=args.use_lmdb, script_name_prv=args.script_prv, config_name_prv=args.config_prv,
                  distill=args.distill, script_teacher=args.script_teacher, config_teacher=args.config_teacher,
                  checkpoint_teacher_path=args.checkpoint_teacher_path,
                  static_model=args.static_model)
+
+
+# This function is called when the module is run directly or as a module
+def run():
+    """Entry point for the module when imported and called."""
+    main()
 
 
 if __name__ == '__main__':

@@ -401,7 +401,8 @@ def build_mixformer_vit(cfg, train=False) -> MixFormer:
     # convert checkpoint
     if cfg.MODEL.BACKBONE.PRETRAINED and train:
         ckpt_path = cfg.MODEL.BACKBONE.PRETRAINED_PATH
-        ckpt: Dict[str, torch.Tensor] = torch.load(ckpt_path, map_location='cpu')['net']
+        ckpt: Dict[str, torch.Tensor] = torch.load(
+            ckpt_path, map_location='cpu', weights_only=False)['net']
         new_ckpt = remove_layers(ckpt, cfg.TRAIN.INVALID_LAYERS)
         missing_keys, unexpected_keys = model.load_state_dict(new_ckpt, strict=False)
         if is_main_process():

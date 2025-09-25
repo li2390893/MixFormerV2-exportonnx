@@ -21,19 +21,13 @@ DATA:
     NUMBER: 2
   TRAIN:
     DATASETS_NAME:
-    - GOT10K_vottrain
-    - LASOT
-    - COCO17
-    - TRACKINGNET
+    - CUSTOM
     DATASETS_RATIO:
-    - 1
-    - 1
-    - 1
     - 1
     SAMPLE_PER_EPOCH: 60000
   VAL:
     DATASETS_NAME:
-    - GOT10K_votval
+    - CUSTOM
     DATASETS_RATIO:
     - 1
     SAMPLE_PER_EPOCH: 10000
@@ -69,6 +63,7 @@ TRAIN:
   VAL_EPOCH_INTERVAL: 5
   WEIGHT_DECAY: 0.0001
   FIND_UNUSED_PARAMETERS: false
+  AMP: true  # Enable Automatic Mixed Precision
 TEST:
   EPOCH: 500
   SEARCH_FACTOR: 4.5

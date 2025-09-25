@@ -398,7 +398,7 @@ def build_mixformer_vit_online(cfg, settings=None, train=True) -> MixFormer:
 
     if cfg.MODEL.PRETRAINED_STATIC and train:
         ckpt_path = settings.static_model
-        ckpt = torch.load(ckpt_path, map_location='cpu')
+        ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
         missing_keys, unexpected_keys = model.load_state_dict(ckpt['net'], strict=False)
         if is_main_process():
             print("Loading pretrained mixformer weights from {}.".format(ckpt_path))
