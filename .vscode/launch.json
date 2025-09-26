@@ -87,6 +87,8 @@
                 "models/MixFormerV2/mixformerv2_small.pth.tar",
                 "--params__search_area_scale",
                 "5.0",
+                "--params__update_interval",
+                "30",
                 "--zoomin",
                 "--save_video"
             ],

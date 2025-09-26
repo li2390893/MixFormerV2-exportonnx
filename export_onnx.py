@@ -39,6 +39,7 @@ class MixFormerOnnxWrapper(nn.Module):
         )
         boxes = outputs["pred_boxes"]
         scores = outputs["pred_scores"]
+        scores = torch.sigmoid(scores)
         return boxes, scores
 
 
@@ -56,7 +57,9 @@ def _normalize_hw(size: Union[int, Iterable[int]]) -> Tuple[int, int]:
     raise ValueError(f"Invalid size specification: {size}")
 
 
-def _get_cfg_value(cfg_obj: Any, path: Sequence[str], fallback: Any = None) -> Any:
+def _get_cfg_value(
+    cfg_obj: Any, path: Sequence[str], fallback: Any = None
+) -> Any:
     node = cfg_obj
     for key in path:
         try:
@@ -105,7 +108,9 @@ def load_config(
     else:
         base_cfg = getattr(config_module, "cfg", None)
         if base_cfg is None:
-            message = f"{module_path} must expose a default cfg or provide a config"
+            message = (
+                f"{module_path} must expose a default cfg or provide a config"
+            )
             raise AttributeError(message)
         cfg = deepcopy(base_cfg)
         print("Loaded default configuration (no experiment overrides).")
