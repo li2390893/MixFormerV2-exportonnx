@@ -160,18 +160,18 @@ class Tracker:
                   videofilepath,
                   optional_box=None,
                   debug=None,
-                  visdom_info=None,
                   save_results=False,
                   is_zoomin=False,
                   expansion_ratio=1.0,
                   max_per_folder=60,
                   save_yolo=False,
-                  save_yolo_interval=2,
                   yolo_label=0,
-                  save_cls=False):
+                  save_cls=False,
+                  save_video=False):
         """Run the tracker with the vieofile.
         args:
             debug: Debug level.
+            save_video: Whether to save the video with tracking results.
         """
 
         # params = self.get_parameters()
@@ -254,6 +254,21 @@ class Tracker:
                 output_boxes.append(init_state)
                 break
 
+        # 添加show_window变量控制窗口显示
+        show_window = True
+
+        # 添加FPS计算相关变量
+        start_time = time.time()
+        frame_count = 0
+        fps = 0
+
+        # 如果需要，初始化视频写入器
+        if save_video:
+            fourcc = cv.VideoWriter_fourcc(*'mp4v')
+            out_video = None
+        else:
+            out_video = None
+
         while True:
             ret, frame = cap.read()
 
@@ -265,8 +280,17 @@ class Tracker:
             # Draw box
             out = tracker.track(frame)
             state = [int(s) for s in out['target_bbox']]
-            print(f"frame_idx: {frame_idx}, conf_score: {out['conf_score']}")
+
+            # 计算FPS
+            frame_count += 1
+            elapsed_time = time.time() - start_time
+            if elapsed_time > 0:
+                fps = frame_count / elapsed_time
+
+            print(f"frame_idx: {frame_idx}, conf_score: {out['conf_score']}, "
+                  f"FPS: {fps:.2f}")
             if out['conf_score'] < 0.2:
+                print("Low confidence score, stopping tracking.")
                 break
             if expansion_ratio != 1.0:
                 x, y, w, h = state
@@ -283,27 +307,45 @@ class Tracker:
                 state = [x, y, new_w, new_h]
             output_boxes.append(state)
 
-            cv.rectangle(frame_disp, (state[0], state[1]), (state[2] + state[0], state[3] + state[1]),
+            # 增加frame_idx计数
+            frame_idx += 1
+
+            cv.rectangle(frame_disp, (state[0], state[1]),
+                         (state[2] + state[0], state[3] + state[1]),
                          (0, 255, 0), 2)
 
             font_color = (0, 0, 0)
-            cv.putText(frame_disp, 'Tracking!', (20, 30), cv.FONT_HERSHEY_COMPLEX_SMALL, 1,
-                       font_color, 1)
-            cv.putText(frame_disp, 'Press r to reset', (20, 55), cv.FONT_HERSHEY_COMPLEX_SMALL, 1,
-                       font_color, 1)
-            cv.putText(frame_disp, 'Press q to quit', (20, 80), cv.FONT_HERSHEY_COMPLEX_SMALL, 1,
-                       font_color, 1)
+            cv.putText(frame_disp, 'Tracking!', (20, 30),
+                       cv.FONT_HERSHEY_COMPLEX_SMALL, 1, font_color, 1)
+            cv.putText(frame_disp, f'FPS: {fps:.2f}', (20, 130),
+                       cv.FONT_HERSHEY_COMPLEX_SMALL, 1, font_color, 1)
+            cv.putText(frame_disp, 'Press r to reset', (20, 55),
+                       cv.FONT_HERSHEY_COMPLEX_SMALL, 1, font_color, 1)
+            cv.putText(frame_disp, 'Press q to quit', (20, 80),
+                       cv.FONT_HERSHEY_COMPLEX_SMALL, 1, font_color, 1)
+            cv.putText(frame_disp, 'Press s to hide/show window', (20, 105),
+                       cv.FONT_HERSHEY_COMPLEX_SMALL, 1, font_color, 1)
 
             # Display the resulting frame
-            cv.imshow(display_name, frame_disp)
+            if show_window:
+                cv.imshow(display_name, frame_disp)
             key = cv.waitKey(1)
             if key == ord('q'):
                 break
+            elif key == ord('s'):
+                show_window = not show_window
+                if show_window:
+                    cv.namedWindow(display_name,
+                                   cv.WINDOW_GUI_EXPANDED | cv.WINDOW_KEEPRATIO)
+                    cv.resizeWindow(display_name, 1920, 1080)
+                else:
+                    cv.destroyWindow(display_name)
             elif key == ord('r'):
                 ret, frame = cap.read()
                 frame_disp = frame.copy()
 
-                cv.putText(frame_disp, 'Select target ROI and press ENTER', (20, 30), cv.FONT_HERSHEY_COMPLEX_SMALL, 1.5,
+                cv.putText(frame_disp, 'Select target ROI and press ENTER',
+                           (20, 30), cv.FONT_HERSHEY_COMPLEX_SMALL, 1.5,
                            (0, 0, 0), 1)
 
                 x, y, w, h = cv.selectROI(
@@ -355,8 +397,23 @@ class Tracker:
                     frame, yolo_box, save_dir, unique_name
                 )
 
+            # 如果需要，写入视频帧
+            if save_video:
+                if out_video is None:
+                    if not os.path.exists(self.results_dir):
+                        os.makedirs(self.results_dir)
+                    # 初始化视频写入器
+                    video_name = Path(videofilepath).stem
+                    save_dir = os.path.join(
+                        self.results_dir, f'{video_name}_tracked.mp4')
+                    out_video = cv.VideoWriter(save_dir, fourcc, 30.0, (frame.shape[1], frame.shape[0]))
+                # 写入当前帧
+                out_video.write(frame_disp)
+
         # When everything done, release the capture
         cap.release()
+        if out_video is not None:
+            out_video.release()
         cv.destroyAllWindows()
 
     def get_parameters(self, tracker_params=None):

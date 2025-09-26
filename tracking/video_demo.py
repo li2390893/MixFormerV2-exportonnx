@@ -20,14 +20,15 @@ def run_video(tracker_name,
               expansion_ratio=1.0,
               max_per_folder=60, 
               save_yolo=False, 
-              save_yolo_interval=2,
               yolo_label=0,
-              save_cls=False):
+              save_cls=False,
+              save_video=False):  # 添加save_video参数
     """Run the tracker on your webcam.
     args:
         tracker_name: Name of tracking method.
         tracker_param: Name of parameter file.
         debug: Debug level.
+        save_video: Whether to save the video with tracking results.
     """
     tracker = Tracker(tracker_name, tracker_param, "LASOT",
                       tracker_params=tracker_params)
@@ -39,9 +40,9 @@ def run_video(tracker_name,
                       expansion_ratio=expansion_ratio,
                       max_per_folder=max_per_folder,
                       save_yolo=save_yolo,
-                      save_yolo_interval=save_yolo_interval,
                       yolo_label=yolo_label,
-                      save_cls=save_cls)
+                      save_cls=save_cls,
+                      save_video=save_video)  # 传递save_video参数
 
 
 def main():
@@ -63,9 +64,9 @@ def main():
     parser.add_argument('--expansion_ratio', type=float, default=1.0, help="Expansion ratio for zooming in the video.")
     parser.add_argument('--max_per_folder', type=int, default=60, help="Maximum number of frames per folder for saving results.")
     parser.add_argument('--save_yolo', action='store_true', help="Whether save results in YOLO format.")
-    parser.add_argument('--save_yolo_interval', type=int, default=2, help="Save results in YOLO format every N frames.")
     parser.add_argument('--yolo_label', type=int, default=0, help="Label for YOLO format.")
     parser.add_argument('--save_cls', action='store_true', help="Whether save classification results (not used in video_demo.py, set to False by default).")
+    parser.add_argument('--save_video', action='store_true', help="Whether to save the video with tracking results.")  # 添加save_video参数
     
     args = parser.parse_args()
 
@@ -85,9 +86,9 @@ def main():
               expansion_ratio=args.expansion_ratio,
               max_per_folder=args.max_per_folder,
               save_yolo=args.save_yolo,
-              save_yolo_interval=args.save_yolo_interval,
               yolo_label=args.yolo_label,
-              save_cls=args.save_cls)  # save_cls is not used in video_demo.py, set to False by default
+              save_cls=args.save_cls,  # save_cls is not used in video_demo.py, set to False by default
+              save_video=args.save_video)  # 传递save_video参数
 
 
 if __name__ == '__main__':
