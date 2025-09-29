@@ -1,18 +1,18 @@
 # MixFormerV2 (Extended README)
 
 - [MixFormerV2 (Extended README)](#mixformerv2-extended-readme)
-  - [导出 ONNX 模型](#导出-onnx-模型)
-  - [视频 Demo 运行与可视化](#视频-demo-运行与可视化)
+  - [Exporting an ONNX Model](#exporting-an-onnx-model)
+  - [Running the Video Demo & Visualization](#running-the-video-demo--visualization)
 
-## 导出 ONNX 模型
+## Exporting an ONNX Model
 
-脚本：`export_onnx.py`。支持：
+Script: `export_onnx.py`. It supports:
 
-- 基于实验配置自动读取模板 / 搜索尺寸
-- 静态或动态 batch（`--batch_mode static|dynamic`）
-- 自动进行导出后合法性检查 + ONNX Runtime 推理验证
+- Auto-reading template / search sizes from an experiment config
+- Static or dynamic batch (`--batch_mode static|dynamic`)
+- Automatic post-export validation + ONNX Runtime inference check
 
-最小示例：
+Minimal example:
 
 ```bash
 python export_onnx.py \
@@ -24,37 +24,37 @@ python export_onnx.py \
   --opset_version 17
 ```
 
-常用参数说明：
+Common argument notes:
 
-- `--tracker_name`：对应 `lib/config/<tracker_name>/config.py`，默认 `mixformer2_vit_online`
-- `--config_name`：`experiments/<tracker_name>/<config_name>.yaml` 中的实验配置名
-- `--config_path`：显式指定 YAML（覆盖 `--config_name`）
-- `--template_size / --search_size / --online_template_size`：若不设，将从配置里自动解析
-- `--batch_mode dynamic`：导出带动态 batch 维度（部署需注意 runtime 支持）
+- `--tracker_name`: Corresponds to `lib/config/<tracker_name>/config.py`, default: `mixformer2_vit_online`
+- `--config_name`: Experiment name found at `experiments/<tracker_name>/<config_name>.yaml`
+- `--config_path`: Explicit YAML path (overrides `--config_name`)
+- `--template_size / --search_size / --online_template_size`: If not set, they are parsed automatically from the config
+- `--batch_mode dynamic`: Export with dynamic batch dimension (ensure runtime/backend support)
 
-导出后验证：
+Post-export checks:
 
-1. 脚本会自动 `onnx.checker.check_model`
-2. 使用 onnxruntime 做一次前向并打印输出 shape
+1. The script calls `onnx.checker.check_model`
+2. Runs a forward pass with onnxruntime and prints output shapes
 
-部署提示：
+Deployment tips:
 
-- 若后端是 TensorRT 且遇到算子不支持，可尝试降低 `--opset_version 16` 或升级 TRT 版本。
-- 可通过添加 `--search_size` 统一固定尺寸，减少后端优化不确定性。
+- If TensorRT reports unsupported ops, try lowering `--opset_version 16` or upgrading TRT.
+- You can add `--search_size` to force a fixed size and reduce backend optimization uncertainty.
 
 ---
 
-## 视频 Demo 运行与可视化
+## Running the Video Demo & Visualization
 
-脚本：`tracking/video_demo.py`
+Script: `tracking/video_demo.py`
 
-功能：
+Features:
 
-- 对单个视频进行跟踪，可选初始框或手动交互（当前脚本示例使用传参）
-- 可调节在线模板更新频率、搜索区域缩放、可视化注意力 (vis_attn) 等
-- 支持保存跟踪结果视频 (`--save_video`) 与 YOLO 标注格式 (`--save_yolo`)
+- Track a single video with a provided initial box or interactive selection (this script example uses arguments)
+- Adjustable online template update interval, search area scale, attention visualization (`vis_attn`), etc.
+- Supports saving the tracking result video (`--save_video`) and YOLO annotation format (`--save_yolo`)
 
-示例（VSCode Launch 已提供一个配置 `video_demo`）：
+Example (a VSCode launch config named `video_demo` may already exist):
 
 ```bash
 python tracking/video_demo.py \
@@ -67,20 +67,20 @@ python tracking/video_demo.py \
   --save_video
 ```
 
-传参机制说明：所有形如 `--params__<key>` 的参数会被解析为内部 `tracker_params["<key>"]`，最终传入 `Tracker` 实例。例如：
+Argument passing mechanism: any flag of the form `--params__<key>` is parsed into `tracker_params["<key>"]` and passed to the `Tracker` instance. Examples:
 
-- `--params__model`：模型权重路径
-- `--params__search_area_scale`：搜索区域缩放因子
-- `--params__update_interval`：在线更新间隔
-- `--params__vis_attn 1`：可视化注意力图（需 tracker 支持）
+- `--params__model`: Model weight path
+- `--params__search_area_scale`: Search area scale factor
+- `--params__update_interval`: Online update interval
+- `--params__vis_attn 1`: Visualize attention maps (tracker must support it)
 
-可选：初始 bbox
+Optional: Initial bbox
 
 ```bash
 --optional_box X Y W H
 ```
 
-输出：
+Outputs:
 
-- 结果可在 `debug/` 或运行目录下生成（依具体实现）。
-- 使用 `--save_video` 会生成叠加预测框的视频文件。
+- Results are written to `debug/` or the working directory (depends on implementation details).
+- With `--save_video`, a video file with overlaid predicted boxes is generated.
