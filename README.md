@@ -2,7 +2,7 @@
 
 - [MixFormerV2 (Extended README)](#mixformerv2-extended-readme)
   - [Exporting an ONNX Model](#exporting-an-onnx-model)
-  - [Running the Video Demo & Visualization](#running-the-video-demo--visualization)
+  - [Running the Video Demo \& Visualization](#running-the-video-demo--visualization)
 
 ## Exporting an ONNX Model
 
@@ -53,6 +53,8 @@ Features:
 - Track a single video with a provided initial box or interactive selection (this script example uses arguments)
 - Adjustable online template update interval, search area scale, attention visualization (`vis_attn`), etc.
 - Supports saving the tracking result video (`--save_video`) and YOLO annotation format (`--save_yolo`)
+
+![track demo](resources/track_basketball.gif)
 
 Example (a VSCode launch config named `video_demo` may already exist):
 

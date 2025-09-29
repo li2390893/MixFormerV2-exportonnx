@@ -54,6 +54,8 @@ python export_onnx.py \
 - 可调节在线模板更新频率、搜索区域缩放、可视化注意力 (vis_attn) 等
 - 支持保存跟踪结果视频 (`--save_video`) 与 YOLO 标注格式 (`--save_yolo`)
 
+![跟踪篮球运动目标示例](resources/track_basketball.gif)
+
 示例（VSCode Launch 已提供一个配置 `video_demo`）：
 
 ```bash
