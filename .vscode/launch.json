@@ -82,15 +82,22 @@
             "args": [
                 "mixformer2_vit_online", // 对应experiments/<script_name>/中的文件夹名称
                 "224_depth4_mlp1_score", // 对应experiments/<tracker_name>/中配置文件的名称
-                "/home/tl/data_80/data/video/110/RGB/bird/big_bird_9.18/Smart_Record_00009_20250918-055817_279166.mp4",
+                "/home/tl/data_80/data/video/110/RGB/uav/fz_1111-1114/uav",
                 "--params__model",
                 "models/MixFormerV2/mixformerv2_small.pth.tar",
-                "--params__search_area_scale",
-                "5.0",
-                "--params__update_interval",
-                "30",
-                "--zoomin",
-                "--save_video"
+                // "--params__search_area_scale",
+                // "5.0",
+                // "--params__update_interval",
+                // "30",
+                // "--zoomin",
+                // "--save_video",
+                // "--save_yolo",
+                // "--yolo_label", "1"
+                "--yolo_model", "/home/tl/work/ultralytics/runs/detect/yolov11m_110_rgb_640_v10/weights/best.pt",
+                "--use_yolo_init",
+                "--save_roi",
+                "--max_per_folder", "200",
+                "--no_display"
             ],
             "env": {
                 "DISPLAY": "tl-Ai:10.0"
@@ -114,7 +121,35 @@
                 "--batch_size",
                 "1",
                 "--opset_version",
-                "17"
+                "11"
+            ],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Test ONNX Inference",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "test_onnx_inference.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--onnx_path",
+                "models/mixformerv2_online_small.onnx",
+                "--checkpoint",
+                "models/MixFormerV2/mixformerv2_small.pth.tar",
+                "--save_inputs_dir",
+                "./test_inputs",
+                "--tracker_name",
+                "mixformer2_vit_online",
+                "--config_name",
+                "224_depth4_mlp1_score",
+                "--template_npy",
+                "./test_inputs/template_input.npy",
+                "--online_template_npy",
+                "./test_inputs/online_template_input.npy",
+                "--search_npy",
+                "./test_inputs/search_input.npy"
             ],
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
