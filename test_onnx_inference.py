@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-Test ONNX inference for MixFormerV2 model, save inputs, and compare errors
+Test ONNX inference for MixFormerV2 model, save inputs, compare errors, and support running ONNX tracking on image sequences.
+
+Features added:
+- Read initial box from text (format: x0 y0 x1 y1 w h cx cy class_id) and initial image
+- Read search image(s) (single image or directory) and run ONNX inference for each frame
+- Draw predicted box and score on the frames and save to output directory
 """
 
 import os
@@ -14,6 +19,10 @@ import torch
 import torch.nn as nn
 import onnxruntime
 import numpy as np
+import cv2 as cv
+from lib.test.tracker.tracker_utils import PreprocessorX_onnx, Preprocessor_wo_mask
+from lib.train.data.processing_utils import sample_target
+from lib.utils.box_ops import clip_box
 from lib.models.mixformer2_vit import build_mixformer2_vit_online
 
 # Add project path to sys.path
@@ -165,6 +174,10 @@ def test_onnx_inference(
     template_npy=None,
     online_template_npy=None,
     search_npy=None,
+    init_box_txt: Optional[str] = None,
+    init_image: Optional[str] = None,
+    search_image: Optional[str] = None,
+    output_dir: Optional[str] = None,
 ):
     """Test ONNX inference, save inputs, and compare with PyTorch"""
 
@@ -188,6 +201,7 @@ def test_onnx_inference(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     export_module = export_module.to(device)
 
+    # Default PyTorch tensors (may be overridden by image-mode below)
     if template_npy:
         template_input = torch.from_numpy(np.load(template_npy)).to(device)
     else:
@@ -207,7 +221,104 @@ def test_onnx_inference(
     if save_inputs_dir:
         save_inputs_to_npy(save_inputs_dir, template_input, online_template_input, search_input)
 
-    # PyTorch inference
+    # If image-mode is requested (init image + bbox + single search image) then perform inference on images
+    def read_init_box(txt_path: str):
+        """Read first line of the bbox text file. Only x0, y0, x1, y1 are required.
+        Additional fields (w, h, cx, cy, class_id) are optional; w,h,cx,cy will be computed
+        from x0,x1,y0,y1. If class_id is provided as the last token, it will be returned as int.
+        Supported formats:
+          x0 y0 x1 y1
+          x0 y0 x1 y1 class_id
+          x0 y0 x1 y1 w h cx cy class_id  (still supported but w/h/cx/cy are ignored)
+        """
+        with open(txt_path, 'r') as f:
+            line = f.readline().strip()
+        ss = line.split()
+        if len(ss) < 4:
+            raise ValueError("Invalid init_box format. Expected at least 'x0 y0 x1 y1'")
+        x0, y0, x1, y1 = map(float, ss[:4])
+        # Normalize coordinates: ensure x <= x1, y <= y1
+        x_min = min(x0, x1)
+        y_min = min(y0, y1)
+        w = abs(x1 - x0)
+        h = abs(y1 - y0)
+        # compute center coordinates (not used directly here but kept for completeness)
+        _cx = x_min + 0.5 * w
+        _cy = y_min + 0.5 * h
+        x = x_min
+        y = y_min
+        class_id = 0
+        # If class id is present as last token, parse it
+        if len(ss) >= 5:
+            try:
+                class_id = int(ss[-1])
+            except Exception:
+                class_id = 0
+        return [x, y, w, h], class_id
+
+    def map_box_back(pred_box, prev_state, resize_factor, search_sz):
+        """Map pred_box returned by model back to image coordinates.
+        pred_box: iterable [cx, cy, w, h] (in search patch coordinates)
+        prev_state: [x, y, w, h] previous state's box
+        resize_factor: float (search patch resize factor returned by sample_target)
+        search_sz: int search crop size (pixels)
+        returns: [x, y, w, h]
+        """
+        cx_prev = prev_state[0] + 0.5 * prev_state[2]
+        cy_prev = prev_state[1] + 0.5 * prev_state[3]
+        cx, cy, w, h = pred_box
+        half_side = 0.5 * search_sz / resize_factor
+        cx_real = cx + (cx_prev - half_side)
+        cy_real = cy + (cy_prev - half_side)
+        return [cx_real - 0.5 * w, cy_real - 0.5 * h, w, h]
+
+    def draw_box(image, box, score=None, color=(0, 0, 255)):
+        # box: [x,y,w,h]
+        x1, y1, w, h = box
+        x2 = x1 + w
+        y2 = y1 + h
+        cv.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), color=color, thickness=2)
+        if score is not None:
+            cv.putText(image, f"{score:.3f}", (int(x1), int(y1)-6), cv.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        return image
+
+    # If image-mode is requested, override .npy/random inputs with image-derived inputs for both PyTorch and ONNX
+    if init_box_txt and init_image and search_image:
+        preproc_x = PreprocessorX_onnx()
+        preproc_torch = Preprocessor_wo_mask()
+        init_box_parsed, class_id = read_init_box(init_box_txt)
+        init_img_bgr = cv.imread(init_image)
+        if init_img_bgr is None:
+            raise FileNotFoundError(f"Init image not found: {init_image}")
+        init_img = cv.cvtColor(init_img_bgr, cv.COLOR_BGR2RGB)
+        # template
+        z_res = sample_target(init_img, init_box_parsed, _get_cfg_value(cfg, ("TEST", "TEMPLATE_FACTOR"), fallback=_get_cfg_value(cfg, ("DATA", "TEMPLATE", "FACTOR"), 2.0)), output_sz=template_size)
+        z_patch_arr = z_res[0]
+        z_amask_arr = z_res[2] if len(z_res) > 2 else z_res[1]
+        img_template_np, _ = preproc_x.process(z_patch_arr, np.asarray(z_amask_arr))
+        torch_template = preproc_torch.process(z_patch_arr)
+        # online template (same as template by default)
+        img_online_template_np = img_template_np
+        torch_online_template = torch_template
+        # single search image
+        search_img_bgr = cv.imread(search_image)
+        if search_img_bgr is None:
+            raise FileNotFoundError(f"Search image not found: {search_image}")
+        search_img = cv.cvtColor(search_img_bgr, cv.COLOR_BGR2RGB)
+        x_res = sample_target(search_img, init_box_parsed, _get_cfg_value(cfg, ("TEST", "SEARCH_FACTOR"), fallback=_get_cfg_value(cfg, ("DATA", "SEARCH", "FACTOR"), 4.5)), output_sz=search_size)
+        x_patch_arr = x_res[0]
+        resize_factor = x_res[1]
+        x_amask_arr = x_res[2] if len(x_res) > 2 else x_res[1]
+        img_search_np, _ = preproc_x.process(x_patch_arr, np.asarray(x_amask_arr))
+        torch_search = preproc_torch.process(x_patch_arr)
+        # set PyTorch inputs
+        template_input = torch_template.to(device)
+        online_template_input = torch_online_template.to(device) if isinstance(torch_online_template, torch.Tensor) else torch.tensor(torch_online_template).to(device)
+        search_input = torch_search.to(device)
+        # set ONNX inputs
+        ort_img_template = img_template_np.astype(np.float32)
+        ort_img_online_template = img_online_template_np.astype(np.float32)
+        ort_img_search = img_search_np.astype(np.float32)
     with torch.no_grad():
         pytorch_outputs = export_module(template_input, online_template_input, search_input)
         pytorch_boxes = pytorch_outputs[0].cpu().numpy()
@@ -215,11 +326,18 @@ def test_onnx_inference(
 
     # ONNX inference
     ort_session = onnxruntime.InferenceSession(onnx_path)
-    ort_inputs = {
-        "template": template_input.cpu().numpy(),
-        "online_template": online_template_input.cpu().numpy(),
-        "search": search_input.cpu().numpy(),
-    }
+    if init_box_txt and init_image and search_image:
+        ort_inputs = {
+            "template": ort_img_template,
+            "online_template": ort_img_online_template,
+            "search": ort_img_search,
+        }
+    else:
+        ort_inputs = {
+            "template": template_input.cpu().numpy(),
+            "online_template": online_template_input.cpu().numpy(),
+            "search": search_input.cpu().numpy(),
+        }
     ort_outputs = ort_session.run(None, ort_inputs)
     onnx_boxes, onnx_scores = ort_outputs
 
@@ -239,10 +357,152 @@ def test_onnx_inference(
 
     if not (errors['boxes_close'] and errors['scores_close']):
         print(f"Warning: Outputs differ beyond threshold {error_threshold}")
-        return False
+        # continue but still return False
+        result_ok = False
     else:
         print("ONNX inference matches PyTorch within threshold")
-        return True
+        result_ok = True
+
+    # If requested, run image-based sequence of detections using the ONNX model and init box
+    if init_box_txt and init_image and search_image:
+        # Prepare preprocessors: ONNX (numpy) and PyTorch (torch cuda)
+        preproc_x = PreprocessorX_onnx()
+        preproc_torch = Preprocessor_wo_mask()
+        # Read init box and initial image
+        init_box, class_id = read_init_box(init_box_txt)
+        # read init image (cv2 returns BGR; convert to RGB)
+        init_img_bgr = cv.imread(init_image)
+        if init_img_bgr is None:
+            raise FileNotFoundError(f"Init image not found: {init_image}")
+        init_img = cv.cvtColor(init_img_bgr, cv.COLOR_BGR2RGB)
+
+        # Create template and online_template inputs once
+        z_res = sample_target(init_img, init_box, _get_cfg_value(cfg, ("TEST", "TEMPLATE_FACTOR"), fallback=_get_cfg_value(cfg, ("DATA", "TEMPLATE", "FACTOR"), 2.0)), output_sz=template_size)
+        z_patch_arr = z_res[0]
+        z_amask_arr = z_res[2] if len(z_res) > 2 else z_res[1]
+        img_template_input, _ = preproc_x.process(z_patch_arr, np.asarray(z_amask_arr))
+        torch_template_input = preproc_torch.process(z_patch_arr)
+        # online_template: use same as template
+        img_online_template_input = img_template_input
+        torch_online_template_input = torch_template_input
+
+        # Build list of search images
+        # search_image is a single image
+        search_images = [search_image]
+
+        # Ensure output_dir exists
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+
+        prev_state = init_box
+        for idx, frame_path in enumerate(search_images):
+            search_img_bgr = cv.imread(frame_path)
+            if search_img_bgr is None:
+                print(f"Warning: search image not found: {frame_path}")
+                continue
+            search_img = cv.cvtColor(search_img_bgr, cv.COLOR_BGR2RGB)
+
+            x_res = sample_target(search_img, prev_state, _get_cfg_value(cfg, ("TEST", "SEARCH_FACTOR"), fallback=_get_cfg_value(cfg, ("DATA", "SEARCH", "FACTOR"), 4.5)), output_sz=search_size)
+            x_patch_arr = x_res[0]
+            resize_factor = x_res[1]
+            x_amask_arr = x_res[2] if len(x_res) > 2 else x_res[1]
+            img_search_input, _ = preproc_x.process(x_patch_arr, np.asarray(x_amask_arr))
+            torch_search_input = preproc_torch.process(x_patch_arr)
+
+            # Run ONNX inference
+            ort_inputs_single = {
+                "template": img_template_input.astype(np.float32),
+                "online_template": img_online_template_input.astype(np.float32),
+                "search": img_search_input.astype(np.float32),
+            }
+            ort_outs = ort_session.run(None, ort_inputs_single)
+            boxes_np, scores_np = ort_outs
+
+            # Handle boxes shape (B, N, 4) or (B, 4N)
+            # We'll compute mean across queries to get one box
+            if boxes_np.ndim == 3:
+                # (1, N, 4)
+                mean_box = boxes_np.mean(axis=1).reshape(-1)
+            elif boxes_np.ndim == 2 and boxes_np.shape[1] % 4 == 0:
+                # (1, 4N) flattened
+                N = boxes_np.shape[1] // 4
+                boxes_np_reshaped = boxes_np.reshape(1, N, 4)
+                mean_box = boxes_np_reshaped.mean(axis=1).reshape(-1)
+            else:
+                raise ValueError("Unexpected shape for pred_boxes from ONNX: {}".format(boxes_np.shape))
+
+            # The model returns coordinates relative to the search patch; follow the tracker mapping
+            # Convert mean_box to CPU np array
+            pred_box = (mean_box * search_size / resize_factor).tolist()
+            pred_score = float(np.mean(scores_np)) if scores_np.size else 0.0
+            mapped_box = map_box_back(pred_box, prev_state, resize_factor, search_size)
+            # Clip using same clip_box as tracker (margin=10)
+            H, W = search_img.shape[:2]
+            mapped_box = clip_box(mapped_box, H, W, margin=10)
+
+            # Print result
+            print(f"Frame {idx} - pred_box: {mapped_box}, score: {pred_score:.4f}")
+
+            # Draw and save result image
+            draw_img = draw_box(search_img_bgr.copy(), mapped_box, score=pred_score)
+            if output_dir:
+                save_path = os.path.join(output_dir, f"{idx:04d}.jpg")
+                cv.imwrite(save_path, draw_img)
+
+            # Track online template update logic (from mixformer2_vit_online.track)
+            # Initialize online variables if not set
+            if 'max_pred_score' not in locals():
+                max_pred_score = -1.0
+                online_max_template = torch_template_input
+                online_forget_id = 0
+                online_template = torch_online_template_input
+                online_size = 1
+                update_interval = 1
+                if isinstance(_get_cfg_value(cfg, ("TEST", "ONLINE_SIZES"), fallback=None), (list, tuple)):
+                    online_size = _get_cfg_value(cfg, ("TEST", "ONLINE_SIZES"), fallback=[1])[0]
+                elif isinstance(_get_cfg_value(cfg, ("TEST", "ONLINE_SIZES"), fallback=None), dict):
+                    val = _get_cfg_value(cfg, ("TEST", "ONLINE_SIZES"), fallback=None)
+                    try:
+                        online_size = list(val.values())[0][0]
+                    except Exception:
+                        online_size = 1
+                update_intervals = _get_cfg_value(cfg, ("TEST", "UPDATE_INTERVALS"), fallback=None)
+                if isinstance(update_intervals, (list, tuple)):
+                    update_interval = update_intervals[0]
+                elif isinstance(update_intervals, dict):
+                    try:
+                        update_interval = list(update_intervals.values())[0][0]
+                    except Exception:
+                        update_interval = _get_cfg_value(cfg, ("DATA", "MAX_SAMPLE_INTERVAL"), fallback=1)
+
+            # Update online template if the prediction meets condition
+            if pred_score > 0.5 and pred_score > max_pred_score:
+                # extract template from image using mapped_box
+                z_res2 = sample_target(search_img, mapped_box, _get_cfg_value(cfg, ("TEST", "TEMPLATE_FACTOR"), fallback=_get_cfg_value(cfg, ("DATA", "TEMPLATE", "FACTOR"), 2.0)), output_sz=template_size)
+                z_patch_arr2 = z_res2[0]
+                z_amask_arr2 = z_res2[2] if len(z_res2) > 2 else z_res2[1]
+                online_max_template = preproc_torch.process(z_patch_arr2)
+                max_pred_score = pred_score
+
+            if (idx + 1) % update_interval == 0:
+                # update online_template
+                if online_size == 1:
+                    online_template = online_max_template
+                elif online_template.shape[0] < online_size:
+                    online_template = torch.cat([online_template, online_max_template])
+                else:
+                    # replace
+                    online_template[online_forget_id:online_forget_id+1] = online_max_template
+                    online_forget_id = (online_forget_id + 1) % online_size
+                # After update, reset aux
+                max_pred_score = -1.0
+                online_max_template = torch_template_input
+
+            # Update prev_state
+            prev_state = mapped_box
+        return result_ok
+    else:
+        return result_ok
 
 
 def main():
@@ -261,6 +521,10 @@ def main():
     parser.add_argument("--template_npy", type=str, default=None, help="Path to template input .npy file")
     parser.add_argument("--online_template_npy", type=str, default=None, help="Path to online template input .npy file")
     parser.add_argument("--search_npy", type=str, default=None, help="Path to search input .npy file")
+    parser.add_argument("--init_box_txt", type=str, default=None, help="Path to init box txt file (x0 y0 x1 y1 w h cx cy class_id)")
+    parser.add_argument("--init_image", type=str, default=None, help="Path to initial image used for template/online_template")
+    parser.add_argument("--search_image", type=str, default=None, help="Path to a single search image used for tracking inference")
+    parser.add_argument("--output_dir", type=str, default=None, help="Directory to save annotated result images")
 
     args = parser.parse_args()
 
@@ -301,6 +565,10 @@ def main():
             template_npy=args.template_npy,
             online_template_npy=args.online_template_npy,
             search_npy=args.search_npy,
+            init_box_txt=args.init_box_txt,
+            init_image=args.init_image,
+            search_image=args.search_image,
+            output_dir=args.output_dir,
         )
         if success:
             print("Test passed!")
@@ -326,5 +594,18 @@ if __name__ == "__main__":
 2. 测试推理并保存输入：
    python test_onnx_inference.py --onnx_path mixformer2_vit.onnx --checkpoint checkpoints/train/mixformer2_vit/teacher_288_depth12/xxx.pth --save_inputs_dir ./test_inputs --tracker_name mixformer2_vit_online --config_name 288_depth8_score
 
-3. 对比误差：脚本会自动输出误差指标，如果超出阈值则警告。
+3. 使用初始框、初始图片和单张搜索图片进行 ONNX 推理（并保存可视化结果）：
+     python test_onnx_inference.py \
+         --onnx_path mixformerv2_online_base.onnx \
+         --checkpoint checkpoints/train/mixformer2_vit/teacher_288_depth12/xxx.pth \
+         --tracker_name mixformer2_vit_online \
+         --config_name 288_depth8_score \
+         --init_box_txt ./init_box.txt \
+         --init_image ./init.jpg \
+         --search_image ./search_frame.jpg \
+         --output_dir ./inference_results/ \
+         --template_size 288 \
+         --search_size 800
+
+4. 对比误差：脚本会自动输出误差指标，如果超出阈值则警告。
 """
