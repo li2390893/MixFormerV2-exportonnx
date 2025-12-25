@@ -1,5 +1,6 @@
 import importlib
 import os
+import json
 from collections import OrderedDict
 from lib.test.evaluation.environment import env_settings
 import time
@@ -410,6 +411,27 @@ class Tracker:
                 print(f"ROI images will be saved to: {roi_base_dir}")
             
             video_name = Path(videofilepath).stem
+        else:
+            video_name = Path(videofilepath).stem
+
+        frame_height, frame_width = frame.shape[:2]
+        video_resolution = {"width": frame_width, "height": frame_height}
+
+        results_json_data = None
+        results_json_path = None
+        current_results_dir = None
+        roi_json_data = None
+        roi_json_path = None
+        current_roi_dir = None
+
+        def finalize_sequence(json_data, json_path):
+            if json_data is None or json_path is None:
+                return
+            if not json_data.get("tracks"):
+                return
+            os.makedirs(os.path.dirname(json_path), exist_ok=True)
+            with open(json_path, "w") as f:
+                json.dump(json_data, f, indent=2)
 
         while True:
             ret, frame = cap.read()
@@ -531,27 +553,43 @@ class Tracker:
                 if not os.path.exists(clip_dir):
                     os.makedirs(clip_dir)
                 video_name = Path(videofilepath).stem
-                # base_results_path = os.path.join(
-                #     self.results_dir, 'video_{}'.format(video_name))
-
-                # tracked_bb = np.array(output_boxes).astype(int)
-                # bbox_file = '{}.txt'.format(base_results_path)
-                # np.savetxt(bbox_file, tracked_bb, delimiter='\t', fmt='%d')
-
                 x1, y1 = state[0], state[1]
                 x2, y2 = state[0] + state[2], state[1] + state[3]
                 target_crop = frame[y1:y2, x1:x2]
                 save_dir = os.path.join(
                     self.results_dir, f'{video_name}_{folder_idx}')
                 os.makedirs(save_dir, exist_ok=True)
+                if current_results_dir != save_dir:
+                    current_results_dir = save_dir
+                    results_json_path = os.path.join(
+                        os.path.dirname(save_dir), f"{Path(save_dir).name}.json")
+                    results_json_data = {
+                        "resolution": video_resolution,
+                        "tracks": []
+                    }
+                img_name = f"{img_idx}.jpg"
                 if save_cls:
                     crop_save(target_crop, save_dir, img_idx)
                 else:
                     resize_and_save(target_crop, save_dir, img_idx,
                                     target_size=(224, 224), keep_aspect_ratio=True)
                 print(f"save {save_dir}/{img_idx}.jpg target image")
+                if results_json_data is not None:
+                    results_json_data["tracks"].append({
+                        "image": img_name,
+                        "bbox": {
+                            "x": int(state[0]),
+                            "y": int(state[1]),
+                            "w": int(state[2]),
+                            "h": int(state[3])
+                        }
+                    })
                 img_idx += 1
                 if img_idx >= max_per_folder:
+                    finalize_sequence(results_json_data, results_json_path)
+                    results_json_data = None
+                    results_json_path = None
+                    current_results_dir = None
                     folder_idx += 1
                     img_idx = 0
 
@@ -627,15 +665,37 @@ class Tracker:
                 roi_save_dir = os.path.join(roi_class_dir, f'{video_name}_{roi_folder_idx}')
                 if not os.path.exists(roi_save_dir):
                     os.makedirs(roi_save_dir)
+                if current_roi_dir != roi_save_dir:
+                    current_roi_dir = roi_save_dir
+                    roi_json_path = os.path.join(
+                        os.path.dirname(roi_save_dir), f"{Path(roi_save_dir).name}.json")
+                    roi_json_data = {
+                        "resolution": video_resolution,
+                        "tracks": []
+                    }
                 
                 # 保存图像
                 img_filename = f"{roi_img_idx:08d}.jpg"
                 img_path = os.path.join(roi_save_dir, img_filename)
                 cv.imwrite(img_path, roi_crop)
+                if roi_json_data is not None:
+                    roi_json_data["tracks"].append({
+                        "image": img_filename,
+                        "bbox": {
+                            "x": int(x),
+                            "y": int(y),
+                            "w": int(w),
+                            "h": int(h)
+                        }
+                    })
                 
                 # 更新计数器
                 roi_img_idx += 1
                 if roi_img_idx >= max_per_folder:
+                    finalize_sequence(roi_json_data, roi_json_path)
+                    roi_json_data = None
+                    roi_json_path = None
+                    current_roi_dir = None
                     roi_folder_idx += 1
                     roi_img_idx = 0
 
@@ -657,6 +717,8 @@ class Tracker:
         if out_video is not None:
             out_video.release()
         cv.destroyAllWindows()
+        finalize_sequence(results_json_data, results_json_path)
+        finalize_sequence(roi_json_data, roi_json_path)
 
     def get_parameters(self, tracker_params=None):
         """Get parameters."""
