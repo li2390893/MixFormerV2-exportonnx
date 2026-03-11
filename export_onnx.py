@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 import onnx
 import onnxruntime
+from onnxsim import simplify
 
 # Add project path to sys.path
 prj_path = os.path.join(os.path.dirname(__file__), ".")
@@ -38,6 +39,8 @@ class MixFormerOnnxWrapper(nn.Module):
             run_score_head=True,
         )
         boxes = outputs["pred_boxes"]
+        # [1,1,4] -> [1,4]
+        boxes = boxes.squeeze(1)
         scores = outputs["pred_scores"]
         scores = torch.sigmoid(scores)
         return boxes, scores
@@ -262,6 +265,30 @@ def export_model_to_onnx(
 
     return True
 
+def simplify_onnx_model(input_path, output_path):
+    """
+    使用 onnxsim 简化 ONNX 模型
+    
+    Args:
+        input_path: 输入 ONNX 模型路径
+        output_path: 输出简化后 ONNX 模型路径
+    """
+    # 加载 ONNX 模型
+    print(f"加载模型: {input_path}")
+    model = onnx.load(input_path)
+    
+    # 简化模型
+    print("正在简化模型...")
+    simplified_model, check = simplify(model)
+    
+    # 验证简化是否成功
+    assert check, "简化失败"
+    print("模型简化成功")
+    
+    # 保存简化后的模型
+    print(f"保存简化后的模型: {output_path}")
+    onnx.save(simplified_model, output_path)
+    print("保存完成")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -433,7 +460,27 @@ def main():
 
         traceback.print_exc()
         sys.exit(1)
+    
+    simplify_onnx_path = args.output.replace(".onnx", "_simplified.onnx")
+    # 简化 ONNX 模型
+    simplify_onnx_model(args.output, simplify_onnx_path)
 
 
 if __name__ == "__main__":
     main()
+
+"""
+python export_onnx.py \
+  --checkpoint ./models/mixformerv2_small.pth.tar \
+  --config_name 224_depth4_mlp1_score \
+  --output out/mixformerv2_small.onnx \
+  --batch_mode static \
+  --batch_size 1 \
+  --opset_version 11
+
+python export_onnx.py \
+  --checkpoint ./models/mixformerv2_base.pth.tar \
+  --config_name 288_depth8_score \
+  --batch_mode dynamic \
+  --output out/mixformerv2_base.onnx
+"""

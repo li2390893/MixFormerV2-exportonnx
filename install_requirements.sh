@@ -1,5 +1,7 @@
+echo "****************** python 3.10.18 ******************"
 echo "****************** Installing pytorch ******************"
-conda install -y pytorch==1.7.0 torchvision==0.8.1 cudatoolkit=10.2 -c pytorch
+# conda install -y pytorch==1.7.0 torchvision==0.8.1 cudatoolkit=10.2 -c pytorch
+pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 
 echo ""
 echo ""
@@ -29,7 +31,8 @@ pip install pandas
 echo ""
 echo ""
 echo "****************** Installing tqdm ******************"
-conda install -y tqdm
+# conda install -y tqdm
+pip install tqdm
 
 echo ""
 echo ""
@@ -39,13 +42,14 @@ pip install pycocotools
 echo ""
 echo ""
 echo "****************** Installing jpeg4py python wrapper ******************"
-apt-get install libturbojpeg
+# need root permission
+# apt-get install libturbojpeg
 pip install jpeg4py
 
 echo ""
 echo ""
 echo "****************** Installing tensorboard ******************"
-pip install tb-nightly
+pip install tb-nightly -i https://pypi.org/simple/
 
 echo ""
 echo ""
@@ -75,7 +79,8 @@ pip install scipy
 echo ""
 echo ""
 echo "****************** Installing visdom ******************"
-pip install visdom
+# pip install visdom -i https://pypi.org/simple/
+conda install -c conda-forge visdom -y
 
 echo ""
 echo ""
@@ -94,6 +99,10 @@ pip install einops
 pip install thop
 
 echo "****************** Install ninja-build for Precise ROI pooling ******************"
-apt-get install ninja-build
+# need root permission
+# apt-get install ninja-build
+
+echo "****************** Installing onnx onnxruntime ******************"
+pip install onnx onnxruntime onnxsim
 
 echo "****************** Installation complete! ******************"
