@@ -23,7 +23,10 @@ class MlpHead(nn.Module):
                                           for i, (n, k) in enumerate(zip([in_dim] + h, h + [out_dim]))])
  
         with torch.no_grad():
+            # 原始的模型是在cuda上运行的，这里将indice也放到cpu上
             self.indice = torch.arange(0, feat_sz).unsqueeze(0).cuda() * stride # (1, feat_sz)
+            # 拆分时候要去掉
+            # self.indice = torch.arange(0, feat_sz).unsqueeze(0) * stride # (1, feat_sz)
 
     def forward(self, reg_tokens, softmax):
         """

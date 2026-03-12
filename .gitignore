@@ -16,8 +16,10 @@
 /test
 *.npy
 test_inputs
-out
+out*
 check2_correct_ops.onnx
 check0_base_optimize.onnx
 check1_fold_constant.onnx
 check3_fuse_ops.onnx
+videos/track-car4.mp4
+debug_inputs

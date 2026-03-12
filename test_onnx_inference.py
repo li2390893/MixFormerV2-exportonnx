@@ -589,10 +589,19 @@ if __name__ == "__main__":
 典型使用方法：
 
 1. 导出 ONNX 模型：
-   python export_onnx.py --checkpoint checkpoints/train/mixformer2_vit/teacher_288_depth12/xxx.pth --output mixformer2_vit.onnx --tracker_name mixformer2_vit_online --config_name 288_depth8_score
+   python export_onnx.py \
+    --checkpoint checkpoints/train/mixformer2_vit/teacher_288_depth12/xxx.pth \
+    --output mixformer2_vit.onnx \
+    --tracker_name mixformer2_vit_online \
+    --config_name 288_depth8_score
 
 2. 测试推理并保存输入：
-   python test_onnx_inference.py --onnx_path mixformer2_vit.onnx --checkpoint checkpoints/train/mixformer2_vit/teacher_288_depth12/xxx.pth --save_inputs_dir ./test_inputs --tracker_name mixformer2_vit_online --config_name 288_depth8_score
+   python test_onnx_inference.py \
+    --onnx_path mixformer2_vit.onnx \
+    --checkpoint checkpoints/train/mixformer2_vit/teacher_288_depth12/xxx.pth \
+    --save_inputs_dir ./test_inputs \
+    --tracker_name mixformer2_vit_online \
+    --config_name 288_depth8_score
 
 3. 使用初始框、初始图片和单张搜索图片进行 ONNX 推理（并保存可视化结果）：
      python test_onnx_inference.py \
